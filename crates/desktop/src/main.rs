@@ -1,6 +1,6 @@
 use std::{
-    fs,
-    path::PathBuf,
+    fs, io,
+    path::{Path, PathBuf},
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
@@ -9,7 +9,7 @@ use std::{
 
 use serde_json::{Value, json};
 use tauri::{Manager, Window, WindowEvent};
-use zcomposer_core::Store;
+use zcomposer_core::{ReviewReport, Store};
 
 struct Project {
     root: PathBuf,
@@ -111,6 +111,44 @@ async fn decide_review(
         .store()?
         .decide_review(id, approved)
         .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn export_review(project: tauri::State<'_, Project>, id: i64) -> Result<String, String> {
+    let report = project
+        .store()?
+        .review_report(id)
+        .map_err(|error| error.to_string())?
+        .ok_or("A revisão precisa estar concluída e ter um parecer salvo.")?;
+    let directory = project.root.join(".zcomposer/reports");
+    let path = save_review_report(&directory, id, &report).map_err(|error| error.to_string())?;
+    Ok(path.display().to_string())
+}
+
+fn save_review_report(directory: &Path, id: i64, report: &ReviewReport) -> io::Result<PathBuf> {
+    fs::create_dir_all(directory)?;
+    for copy in 1..=10_000 {
+        let name = if copy == 1 {
+            format!("revisao-{id}.md")
+        } else {
+            format!("revisao-{id}-{copy}.md")
+        };
+        let path = directory.join(name);
+        let file = match fs::File::create_new(&path) {
+            Ok(file) => file,
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error),
+        };
+        if let Err(error) = report.write_markdown(file, id) {
+            let _ = fs::remove_file(&path);
+            return Err(error);
+        }
+        return Ok(path);
+    }
+    Err(io::Error::new(
+        io::ErrorKind::AlreadyExists,
+        "Limite de cópias desta revisão atingido.",
+    ))
 }
 
 #[tauri::command]
@@ -239,6 +277,7 @@ fn main() {
             live_answer,
             review_decision,
             decide_review,
+            export_review,
             session_history,
             studio_order,
             save_studio_order,
@@ -262,5 +301,32 @@ mod tests {
         assert!(lifecycle.finish_turn());
         assert!(lifecycle.start_turn().is_err());
         assert!(!lifecycle.request_close());
+    }
+
+    #[test]
+    fn exporting_again_preserves_the_previous_report() -> io::Result<()> {
+        let directory =
+            std::env::temp_dir().join(format!("zcomposer-export-{}", std::process::id()));
+        fs::create_dir(&directory)?;
+        let mut report = ReviewReport {
+            task: format!("Revisar commit {}", "a".repeat(40)),
+            answer: "Parecer de teste".into(),
+            approved: None,
+        };
+        let first = save_review_report(&directory, 7, &report)?;
+        report.approved = Some(true);
+        let second = save_review_report(&directory, 7, &report)?;
+        let before = fs::read_to_string(&first)?;
+        let after = fs::read_to_string(&second)?;
+        fs::remove_file(&first)?;
+        fs::remove_file(&second)?;
+        fs::remove_dir(&directory)?;
+
+        assert_eq!(first, directory.join("revisao-7.md"));
+        assert_eq!(second, directory.join("revisao-7-2.md"));
+        assert!(before.contains("Pendente"));
+        assert!(after.contains("Aprovada"));
+        assert!(after.contains(&"a".repeat(40)));
+        Ok(())
     }
 }

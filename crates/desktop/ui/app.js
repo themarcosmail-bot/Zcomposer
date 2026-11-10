@@ -16,6 +16,8 @@ const decisionStatus = document.querySelector("#review-decision-status");
 const decisionActions = document.querySelector("#review-decision-actions");
 const approveReview = document.querySelector("#approve-review");
 const rejectReview = document.querySelector("#reject-review");
+const exportReview = document.querySelector("#export-review");
+const exportStatus = document.querySelector("#review-export-status");
 const stateLabels = {
   queued: "Na fila",
   running: "Trabalhando",
@@ -190,6 +192,9 @@ async function renderDetail() {
   decisionPanel.hidden = !(hasAnswer && session.agent === "codex-review");
   decisionActions.hidden = true;
   decisionStatus.textContent = "";
+  exportReview.hidden = true;
+  exportReview.disabled = false;
+  exportStatus.textContent = "";
   const answerHeading = document.querySelector("#answer-heading");
   answerHeading.hidden = !hasAnswer && !isLive;
   answerHeading.textContent = isLive ? "Resposta em andamento" : "Resposta";
@@ -213,6 +218,7 @@ async function renderDetail() {
     output.textContent = answer.status === "fulfilled" ? answer.value : "Não foi possível carregar a resposta.";
   }
   if (!decisionPanel.hidden && answer.status === "fulfilled") {
+    exportReview.hidden = false;
     decisionStatus.textContent = "Carregando decisão…";
     void refreshReviewDecision(session.id, request);
   }
@@ -291,6 +297,20 @@ studio.addEventListener("click", () => { view = "studio"; render(); });
 office.addEventListener("click", () => { view = "office"; render(); });
 approveReview.addEventListener("click", () => void submitReviewDecision(true));
 rejectReview.addEventListener("click", () => void submitReviewDecision(false));
+exportReview.addEventListener("click", async () => {
+  if (exportReview.hidden || exportReview.disabled || !detailSession) return;
+  const request = detailRequest;
+  exportReview.disabled = true;
+  exportStatus.textContent = "Exportando…";
+  try {
+    const path = await invoke("export_review", { id: detailSession.id });
+    if (request === detailRequest) exportStatus.textContent = `Relatório salvo em ${path}`;
+  } catch (error) {
+    if (request === detailRequest) exportStatus.textContent = `Falha ao exportar. ${error}`;
+  } finally {
+    if (request === detailRequest) exportReview.disabled = false;
+  }
+});
 function renderTurnMode() {
   const review = mode.value === "review";
   const label = document.querySelector("#turn-label");

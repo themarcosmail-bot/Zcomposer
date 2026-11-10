@@ -47,6 +47,30 @@ pub struct ReviewReport {
     pub approved: Option<bool>,
 }
 
+impl ReviewReport {
+    pub fn write_markdown(&self, mut output: impl std::io::Write, id: i64) -> std::io::Result<()> {
+        let decision = match self.approved {
+            Some(true) => "Aprovada",
+            Some(false) => "Ajustes solicitados",
+            None => "Pendente",
+        };
+        writeln!(
+            output,
+            "# Revisão do Codex\n\n- Sessão `#{id}`\n- Decisão humana — {decision}"
+        )?;
+        if let Some(commit) = self.task.strip_prefix("Revisar commit ").filter(|commit| {
+            matches!(commit.len(), 40 | 64) && commit.bytes().all(|byte| byte.is_ascii_hexdigit())
+        }) {
+            writeln!(output, "- Commit `{commit}`")?;
+        }
+        writeln!(output, "\n## Parecer\n")?;
+        for line in self.answer.lines() {
+            writeln!(output, "    {line}")?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct Event {
     pub cursor: i64,
