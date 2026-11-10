@@ -14,6 +14,7 @@ use zcomposer_core::Store;
 struct Project {
     root: PathBuf,
     lifecycle: Mutex<WindowLifecycle>,
+    draft: Arc<Mutex<Option<(i64, String)>>>,
 }
 
 #[derive(Default)]
@@ -81,6 +82,15 @@ async fn answer(project: tauri::State<'_, Project>, id: i64) -> Result<String, S
 }
 
 #[tauri::command]
+fn live_answer(project: tauri::State<'_, Project>, id: i64) -> Result<Option<String>, String> {
+    let draft = project.draft.lock().map_err(|error| error.to_string())?;
+    Ok(draft
+        .as_ref()
+        .filter(|(session, _)| *session == id)
+        .map(|(_, text)| text.clone()))
+}
+
+#[tauri::command]
 async fn session_history(
     project: tauri::State<'_, Project>,
     id: i64,
@@ -125,13 +135,19 @@ async fn run_turn(
         .map_err(|error| error.to_string())?
         .start_turn()?;
     let root = project.root.clone();
+    let draft = Arc::clone(&project.draft);
     let result = tauri::async_runtime::spawn_blocking(move || {
         let mut store =
             Store::open(root.join(".zcomposer/state.sqlite")).map_err(|error| error.to_string())?;
-        zcomposer_adapters::run_codex_turn(&mut store, &root, &prompt, Some(&cancel))
-            .map_err(|error| error.to_string())
+        zcomposer_adapters::run_codex_turn(&mut store, &root, &prompt, Some(&cancel), |id, text| {
+            if let Ok(mut draft) = draft.lock() {
+                *draft = Some((id, text.to_owned()));
+            }
+        })
+        .map_err(|error| error.to_string())
     })
     .await;
+    *project.draft.lock().map_err(|error| error.to_string())? = None;
     let close = project
         .lifecycle
         .lock()
@@ -165,6 +181,7 @@ fn main() {
         .manage(Project {
             root,
             lifecycle: Mutex::new(WindowLifecycle::default()),
+            draft: Arc::new(Mutex::new(None)),
         })
         .on_window_event(|window, event| {
             if window.label() != "main" {
@@ -184,6 +201,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             snapshot,
             answer,
+            live_answer,
             session_history,
             studio_order,
             save_studio_order,

@@ -178,9 +178,12 @@ async function renderDetail() {
   historyError.textContent = "";
   const output = document.querySelector("#answer");
   const hasAnswer = session.state === "completed" && session.agent === "codex";
-  document.querySelector("#answer-heading").hidden = !hasAnswer;
-  output.hidden = !hasAnswer;
-  output.textContent = hasAnswer ? "Carregando resposta…" : "";
+  const isLive = session.state === "running" && session.agent === "codex";
+  const answerHeading = document.querySelector("#answer-heading");
+  answerHeading.hidden = !hasAnswer && !isLive;
+  answerHeading.textContent = isLive ? "Resposta em andamento" : "Resposta";
+  output.hidden = answerHeading.hidden;
+  output.textContent = isLive ? "Aguardando resposta…" : hasAnswer ? "Carregando resposta…" : "";
   const [states, answer] = await Promise.allSettled([
     invoke("session_history", { id: session.id }),
     hasAnswer ? invoke("answer", { id: session.id }) : null,
@@ -197,6 +200,16 @@ async function renderDetail() {
   }
   if (hasAnswer) {
     output.textContent = answer.status === "fulfilled" ? answer.value : "Não foi possível carregar a resposta.";
+  }
+}
+
+async function refreshLiveAnswer() {
+  const session = detailSession;
+  if (session?.agent !== "codex" || session.state !== "running") return;
+  const request = detailRequest;
+  const text = await invoke("live_answer", { id: session.id });
+  if (request === detailRequest && text) {
+    document.querySelector("#answer").textContent = text;
   }
 }
 
@@ -218,6 +231,7 @@ async function refresh() {
 async function poll() {
   try {
     await refresh();
+    await refreshLiveAnswer();
   } catch (error) {
     status.textContent = String(error);
   }

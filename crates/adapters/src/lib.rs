@@ -27,7 +27,7 @@ fn codex_executable() -> Result<PathBuf> {
 }
 
 pub fn run_codex(store: &mut Store, cwd: &Path, prompt: &str) -> Result<i64> {
-    let (id, _) = run_codex_turn(store, cwd, prompt, None)?;
+    let (id, _) = run_codex_turn(store, cwd, prompt, None, |_, _| {})?;
     Ok(id)
 }
 
@@ -36,6 +36,7 @@ pub fn run_codex_turn(
     cwd: &Path,
     prompt: &str,
     cancel: Option<&AtomicBool>,
+    mut on_draft: impl FnMut(i64, &str),
 ) -> Result<(i64, State)> {
     let id = store.create("codex", prompt)?;
     if !store.transition(id, State::Running)? {
@@ -43,7 +44,7 @@ pub fn run_codex_turn(
     }
     let outcome = (|| {
         let mut server = Server::start(cwd, cancel)?;
-        server.run(cwd, prompt)
+        server.run(cwd, prompt, |draft| on_draft(id, draft))
     })();
     match outcome {
         Ok((thread_id, answer)) => {
@@ -169,7 +170,12 @@ impl<'a> Server<'a> {
         }
     }
 
-    fn run(&mut self, cwd: &Path, prompt: &str) -> Result<(String, String)> {
+    fn run(
+        &mut self,
+        cwd: &Path,
+        prompt: &str,
+        mut on_draft: impl FnMut(&str),
+    ) -> Result<(String, String)> {
         self.request(
             1,
             "initialize",
@@ -192,6 +198,7 @@ impl<'a> Server<'a> {
             "approvalPolicy": "never", "sandboxPolicy": {"type": "readOnly", "networkAccess": false}
         }}))?;
         let mut answer = String::new();
+        let mut pending = Vec::<(String, String)>::new();
         let mut turn_id = None;
         let mut interrupting = false;
         loop {
@@ -233,12 +240,28 @@ impl<'a> Server<'a> {
                         turn_id = Some(id.to_owned());
                     }
                 }
+                Some("item/agentMessage/delta") => {
+                    if let (Some(id), Some(delta)) =
+                        (params["itemId"].as_str(), params["delta"].as_str())
+                    {
+                        if let Some((_, text)) = pending.iter_mut().find(|(item, _)| item == id) {
+                            text.push_str(delta);
+                        } else {
+                            pending.push((id.to_owned(), delta.to_owned()));
+                        }
+                        on_draft(&compose_draft(&answer, &pending));
+                    }
+                }
                 Some("item/completed") if params["item"]["type"] == "agentMessage" => {
                     if let Some(text) = params["item"]["text"].as_str() {
                         if !answer.is_empty() {
                             answer.push_str("\n\n");
                         }
                         answer.push_str(text);
+                        if let Some(id) = params["item"]["id"].as_str() {
+                            pending.retain(|(item, _)| item != id);
+                        }
+                        on_draft(&compose_draft(&answer, &pending));
                     }
                 }
                 Some("turn/completed") if params["turn"]["status"] == "completed" => {
@@ -256,6 +279,14 @@ impl<'a> Server<'a> {
             }
         }
     }
+}
+
+fn compose_draft(answer: &str, pending: &[(String, String)]) -> String {
+    std::iter::once(answer)
+        .chain(pending.iter().map(|(_, text)| text.as_str()))
+        .filter(|text| !text.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n\n")
 }
 
 impl Drop for Server<'_> {
@@ -278,6 +309,7 @@ mod tests {
             Path::new("unused"),
             "Tarefa de teste",
             Some(&cancel),
+            |_, _| {},
         )?;
         assert_eq!(state, State::Interrupted);
         assert_eq!(

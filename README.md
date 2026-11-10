@@ -25,4 +25,6 @@ Se você fechar a janela durante um turno, ela aguarda o encerramento e a grava�
 
 Studio e Office mostram o mesmo conjunto de sessões e preservam a seleção quando você alterna de vista. No Studio, arraste os cartões entre posições da grade ou use os botões de seta. O projeto salva a ordem no SQLite e a restaura ao reabrir. No Office, cada sessão tem uma estação de trabalho que reflete seu estado. Abra um cartão ou uma estação para consultar a tarefa, o histórico de estados e a resposta quando disponível.
 
+Selecione um turno ativo iniciado na janela para acompanhar a resposta enquanto o Codex escreve. O texto parcial fica na memória. Quando o turno conclui, a resposta final fica no SQLite.
+
 No Windows com Rust MSVC, use o Developer PowerShell do Visual Studio caso o linker e o compilador C do SQLite não sejam encontrados.
