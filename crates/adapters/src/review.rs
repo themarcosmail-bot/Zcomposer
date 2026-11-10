@@ -68,9 +68,14 @@ pub fn review_commit_turn(
     run_turn(store, cwd, "codex-review", &task, &prompt, cancel, on_draft)
 }
 
-fn git_output(cwd: &Path, args: &[&str], limit: usize) -> Result<String> {
+pub(super) fn git_output(cwd: &Path, args: &[&str], limit: usize) -> Result<String> {
     let mut child = Command::new(executable("git")?)
-        .args(["--no-pager", "--no-replace-objects"])
+        .args([
+            "--no-pager",
+            "--no-replace-objects",
+            "-c",
+            "core.hooksPath=/dev/null",
+        ])
         .args(args)
         .current_dir(cwd)
         .env("GIT_NO_LAZY_FETCH", "1")
@@ -92,7 +97,7 @@ fn git_output(cwd: &Path, args: &[&str], limit: usize) -> Result<String> {
         return Err(format!("A saída do Git excedeu {limit} bytes.").into());
     }
     if !child.wait()?.success() {
-        return Err(format!("O Git não conseguiu executar {} para a revisão.", args[0]).into());
+        return Err(format!("O Git não conseguiu executar {}.", args[0]).into());
     }
     Ok(String::from_utf8(bytes)?)
 }

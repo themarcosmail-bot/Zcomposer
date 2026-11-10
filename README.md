@@ -34,3 +34,22 @@ Depois de ler o parecer, use **Aprovar revisão** ou **Solicitar ajustes**. A de
 Para exportar o registro em Markdown, abra uma revisão concluída e clique em **Exportar Markdown**. O Zcomposer salva uma cópia em `.zcomposer/reports/` e mostra o caminho na janela. Na CLI, use `cargo run -- review-report 7 > revisao-7.md`, substituindo `7` pelo ID da revisão. O relatório reúne o hash do commit, a decisão humana e o texto do parecer.
 
 No Windows com Rust MSVC, use o Developer PowerShell do Visual Studio caso o linker e o compilador C do SQLite não sejam encontrados.
+
+## Fluxo de implementação e revisão
+
+Compile a CLI com `cargo build -p zcomposer`. Na raiz do repositório que você quer editar, chame o executável `zcomposer` pelo PATH ou pelo caminho completo em `target/debug/` do Zcomposer. O exemplo usa um projeto Rust.
+
+```powershell
+zcomposer workflow "Implemente a tarefa e ajuste os testes" -- cargo test --offline
+```
+
+O Codex propõe um patch de até 64 KiB. O Zcomposer aplica o patch em um worktree isolado, cria o commit, executa o comando informado sobre ele e abre uma revisão se os testes passarem. O worktree e o log ficam em `.zcomposer/workflows/`. O comando de testes é executado localmente com as permissões da sua conta.
+
+Leia o parecer no Studio, no Office ou com `zcomposer review-report 7`. Use o ID da revisão exibido ao final do workflow.
+
+```powershell
+zcomposer review-decide 7 approve
+zcomposer integrate 7
+```
+
+Use `reject` para solicitar ajustes. Depois de uma falha ou rejeição, rode um novo workflow para uma nova tentativa. A integração é local e exige aprovação, a branch de origem e uma árvore de trabalho limpa. O Git avança a branch por fast-forward a partir do commit-base registrado.

@@ -47,6 +47,13 @@ pub struct ReviewReport {
     pub approved: Option<bool>,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub struct IntegrationCandidate {
+    pub branch: String,
+    pub base: String,
+    pub commit: String,
+}
+
 impl ReviewReport {
     pub fn write_markdown(&self, mut output: impl std::io::Write, id: i64) -> std::io::Result<()> {
         let decision = match self.approved {
@@ -117,6 +124,12 @@ impl Store {
              CREATE TABLE IF NOT EXISTS review_decisions (
                  session_id INTEGER PRIMARY KEY REFERENCES sessions(id),
                  approved INTEGER NOT NULL CHECK (approved IN (0, 1))
+             );
+             CREATE TABLE IF NOT EXISTS workflow_candidates (
+                 review_id INTEGER PRIMARY KEY REFERENCES sessions(id),
+                 branch TEXT NOT NULL,
+                 base_commit TEXT NOT NULL,
+                 candidate_commit TEXT NOT NULL
              );
              COMMIT;",
         )?;
@@ -261,6 +274,45 @@ impl Store {
             .optional()
     }
 
+    pub fn record_workflow_candidate(
+        &self,
+        review_id: i64,
+        candidate: &IntegrationCandidate,
+    ) -> rusqlite::Result<bool> {
+        let task = format!("Revisar commit {}", candidate.commit);
+        let changed = self.0.execute(
+            "INSERT INTO workflow_candidates (review_id, branch, base_commit, candidate_commit)
+             SELECT sessions.id, ?2, ?3, ?4 FROM sessions JOIN turn_results ON turn_results.session_id = sessions.id
+             WHERE sessions.id = ?1 AND sessions.agent = 'codex-review' AND sessions.state = 'completed'
+               AND sessions.task = ?5",
+            params![review_id, candidate.branch, candidate.base, candidate.commit, task],
+        )?;
+        Ok(changed == 1)
+    }
+
+    pub fn approved_candidate(
+        &self,
+        review_id: i64,
+    ) -> rusqlite::Result<Option<IntegrationCandidate>> {
+        use rusqlite::OptionalExtension;
+
+        self.0
+            .query_row(
+                "SELECT branch, base_commit, candidate_commit FROM workflow_candidates
+             JOIN review_decisions ON review_decisions.session_id = workflow_candidates.review_id
+             WHERE workflow_candidates.review_id = ?1 AND approved = 1",
+                [review_id],
+                |row| {
+                    Ok(IntegrationCandidate {
+                        branch: row.get(0)?,
+                        base: row.get(1)?,
+                        commit: row.get(2)?,
+                    })
+                },
+            )
+            .optional()
+    }
+
     pub fn review_report(&self, id: i64) -> rusqlite::Result<Option<ReviewReport>> {
         use rusqlite::OptionalExtension;
 
@@ -394,6 +446,34 @@ mod tests {
                 approved: Some(false),
             })
         );
+        Ok(())
+    }
+
+    #[test]
+    fn integration_requires_approval_of_the_tested_commit() -> rusqlite::Result<()> {
+        let mut store = Store::open(":memory:")?;
+        let candidate = IntegrationCandidate {
+            branch: "refs/heads/main".into(),
+            base: "base".into(),
+            commit: "candidate".into(),
+        };
+        let unrelated = store.create("codex-review", "Revisar commit outro")?;
+        let rejected = store.create("codex-review", "Revisar commit candidate")?;
+        let approved = store.create("codex-review", "Revisar commit candidate")?;
+        for id in [unrelated, rejected, approved] {
+            store.transition(id, State::Running)?;
+            store.finish_turn(id, "review", "Parecer")?;
+        }
+        assert!(!store.record_workflow_candidate(unrelated, &candidate)?);
+        assert!(store.decide_review(unrelated, true)?);
+        assert_eq!(store.approved_candidate(unrelated)?, None);
+        assert!(store.record_workflow_candidate(rejected, &candidate)?);
+        assert!(store.decide_review(rejected, false)?);
+        assert_eq!(store.approved_candidate(rejected)?, None);
+        assert!(store.record_workflow_candidate(approved, &candidate)?);
+        assert_eq!(store.approved_candidate(approved)?, None);
+        assert!(store.decide_review(approved, true)?);
+        assert_eq!(store.approved_candidate(approved)?, Some(candidate));
         Ok(())
     }
 }

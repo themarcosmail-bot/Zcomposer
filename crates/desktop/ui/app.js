@@ -186,7 +186,7 @@ async function renderDetail() {
   history.replaceChildren();
   historyError.textContent = "";
   const output = document.querySelector("#answer");
-  const isCodex = ["codex", "codex-review"].includes(session.agent);
+  const isCodex = ["codex", "codex-review", "codex-implement"].includes(session.agent);
   const hasAnswer = session.state === "completed" && isCodex;
   const isLive = session.state === "running" && isCodex;
   decisionPanel.hidden = !(hasAnswer && session.agent === "codex-review");

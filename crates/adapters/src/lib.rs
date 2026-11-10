@@ -16,12 +16,14 @@ use zcomposer_core::{State, Store};
 
 mod review;
 pub use review::{review_commit, review_commit_turn};
+mod workflow;
+pub use workflow::{implement_workflow, integrate_workflow};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 fn executable(name: &str) -> Result<PathBuf> {
     let path = env::var_os("PATH").ok_or("PATH indisponível")?;
-    let filename = if cfg!(windows) {
+    let filename = if cfg!(windows) && !name.to_ascii_lowercase().ends_with(".exe") {
         format!("{name}.exe")
     } else {
         name.to_owned()
@@ -63,7 +65,9 @@ fn run_turn(
     }
     let outcome = (|| {
         let mut server = Server::start(cwd, cancel)?;
-        server.run(cwd, prompt, |draft| on_draft(id, draft))
+        server.run(cwd, prompt, agent == "codex-implement", |draft| {
+            on_draft(id, draft)
+        })
     })();
     match outcome {
         Ok((thread_id, answer)) => {
@@ -193,6 +197,7 @@ impl<'a> Server<'a> {
         &mut self,
         cwd: &Path,
         prompt: &str,
+        implementation: bool,
         mut on_draft: impl FnMut(&str),
     ) -> Result<(String, String)> {
         self.request(
@@ -212,10 +217,19 @@ impl<'a> Server<'a> {
         )?;
         let thread_id = response["thread"]["id"].as_str().ok_or("thread sem ID")?;
         // Observe notifications even when they precede the turn/start response.
-        self.send(json!({"id": 3, "method": "turn/start", "params": {
+        let mut params = json!({
             "threadId": thread_id, "input": [{"type": "text", "text": prompt}],
             "approvalPolicy": "never", "sandboxPolicy": {"type": "readOnly", "networkAccess": false}
-        }}))?;
+        });
+        if implementation {
+            params["outputSchema"] = json!({
+                "type": "object",
+                "properties": {"patch": {"type": "string"}},
+                "required": ["patch"],
+                "additionalProperties": false
+            });
+        }
+        self.send(json!({"id": 3, "method": "turn/start", "params": params}))?;
         let mut answer = String::new();
         let mut pending = Vec::<(String, String)>::new();
         let mut turn_id = None;
@@ -273,6 +287,9 @@ impl<'a> Server<'a> {
                 }
                 Some("item/completed") if params["item"]["type"] == "agentMessage" => {
                     if let Some(text) = params["item"]["text"].as_str() {
+                        if implementation {
+                            answer.clear();
+                        }
                         if !answer.is_empty() {
                             answer.push_str("\n\n");
                         }

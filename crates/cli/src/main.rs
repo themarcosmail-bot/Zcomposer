@@ -2,7 +2,7 @@ use std::{env, error::Error, fs, io, path::Path};
 
 use zcomposer_core::{State, Store};
 
-const USAGE: &str = "zcomposer demo | codex <tarefa> | review <commit> | review-report <id> | answer <id> | sessions | events [cursor]";
+const USAGE: &str = "zcomposer demo | codex <tarefa> | review <commit> | review-report <id> | answer <id> | sessions | events [cursor]\nzcomposer workflow <tarefa> -- <programa de teste> [args] | review-decide <id> <approve|reject> | integrate <id>";
 
 fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let args: Vec<_> = env::args().skip(1).collect();
@@ -19,6 +19,36 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     fs::create_dir_all(directory)?;
     let mut store = Store::open(directory.join("state.sqlite"))?;
     match args.as_slice() {
+        [command, task, separator, tests @ ..]
+            if command == "workflow" && separator == "--" && !task.trim().is_empty() =>
+        {
+            let review = zcomposer_adapters::implement_workflow(
+                &mut store,
+                &env::current_dir()?,
+                task,
+                tests,
+            )?;
+            println!(
+                "Revisão #{review} aguardando decisão.\n{}",
+                store.answer(review)?
+            );
+        }
+        [command, id, decision] if command == "review-decide" => {
+            let approved = match decision.as_str() {
+                "approve" => true,
+                "reject" => false,
+                _ => return Err("Use approve ou reject.".into()),
+            };
+            if !store.decide_review(id.parse()?, approved)? {
+                return Err("A revisão precisa estar concluída e aguardar uma decisão.".into());
+            }
+            println!("Decisão salva para a revisão #{id}.");
+        }
+        [command, id] if command == "integrate" => {
+            let commit =
+                zcomposer_adapters::integrate_workflow(&store, &env::current_dir()?, id.parse()?)?;
+            println!("Commit integrado localmente: {commit}");
+        }
         [command, prompt] if command == "codex" && !prompt.trim().is_empty() => {
             let id = zcomposer_adapters::run_codex(&mut store, &env::current_dir()?, prompt)?;
             println!("Sessão {id}\n{}", store.answer(id)?);
