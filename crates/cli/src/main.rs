@@ -2,6 +2,9 @@ use std::{env, error::Error, fs, path::Path};
 
 use zcomposer_core::{State, Store};
 
+const USAGE: &str =
+    "zcomposer demo | codex <tarefa> | review <commit> | answer <id> | sessions | events [cursor]";
+
 fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let args: Vec<_> = env::args().skip(1).collect();
     let command = match args.as_slice() {
@@ -9,7 +12,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         [] => "help",
     };
     if matches!(command, "help" | "--help" | "-h") {
-        println!("zcomposer demo | codex <tarefa> | answer <id> | sessions | events [cursor]");
+        println!("{USAGE}");
         return Ok(());
     }
 
@@ -19,6 +22,10 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     match args.as_slice() {
         [command, prompt] if command == "codex" && !prompt.trim().is_empty() => {
             let id = zcomposer_adapters::run_codex(&mut store, &env::current_dir()?, prompt)?;
+            println!("Sessão {id}\n{}", store.answer(id)?);
+        }
+        [command, revision] if command == "review" && !revision.trim().is_empty() => {
+            let id = zcomposer_adapters::review_commit(&mut store, &env::current_dir()?, revision)?;
             println!("Sessão {id}\n{}", store.answer(id)?);
         }
         [command, id] if command == "answer" => {
@@ -51,12 +58,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 println!("{}\t{}\t{}", event.cursor, event.session_id, event.state);
             }
         }
-        _ => {
-            return Err(
-                "uso: zcomposer demo | codex <tarefa> | answer <id> | sessions | events [cursor]"
-                    .into(),
-            );
-        }
+        _ => return Err(format!("uso: {USAGE}").into()),
     }
     Ok(())
 }

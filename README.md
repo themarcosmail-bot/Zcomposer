@@ -27,4 +27,6 @@ Studio e Office mostram o mesmo conjunto de sessões e preservam a seleção qua
 
 Selecione um turno ativo iniciado na janela para acompanhar a resposta enquanto o Codex escreve. O texto parcial fica na memória. Quando o turno conclui, a resposta final fica no SQLite.
 
+Use `cargo run -- review HEAD` para enviar o diff de um commit ao Codex e registrar o parecer. Você pode indicar outro commit no lugar de `HEAD`. A revisão usa o diff do commit resolvido, aceita até 64 KiB e aparece como uma sessão `codex-review` no Studio e no Office.
+
 No Windows com Rust MSVC, use o Developer PowerShell do Visual Studio caso o linker e o compilador C do SQLite não sejam encontrados.

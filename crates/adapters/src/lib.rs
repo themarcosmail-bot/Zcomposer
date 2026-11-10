@@ -14,14 +14,21 @@ use std::{
 use serde_json::{Value, json};
 use zcomposer_core::{State, Store};
 
+mod review;
+pub use review::review_commit;
+
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-fn codex_executable() -> Result<PathBuf> {
+fn executable(name: &str) -> Result<PathBuf> {
     let path = env::var_os("PATH").ok_or("PATH indisponível")?;
-    let filename = if cfg!(windows) { "codex.exe" } else { "codex" };
+    let filename = if cfg!(windows) {
+        format!("{name}.exe")
+    } else {
+        name.to_owned()
+    };
     env::split_paths(&path)
         .filter(|directory| directory.is_absolute())
-        .map(|directory| directory.join(filename))
+        .map(|directory| directory.join(&filename))
         .find(|candidate| candidate.is_file())
         .ok_or_else(|| format!("{filename} não encontrado no PATH").into())
 }
@@ -36,9 +43,21 @@ pub fn run_codex_turn(
     cwd: &Path,
     prompt: &str,
     cancel: Option<&AtomicBool>,
+    on_draft: impl FnMut(i64, &str),
+) -> Result<(i64, State)> {
+    run_turn(store, cwd, "codex", prompt, prompt, cancel, on_draft)
+}
+
+fn run_turn(
+    store: &mut Store,
+    cwd: &Path,
+    agent: &str,
+    task: &str,
+    prompt: &str,
+    cancel: Option<&AtomicBool>,
     mut on_draft: impl FnMut(i64, &str),
 ) -> Result<(i64, State)> {
-    let id = store.create("codex", prompt)?;
+    let id = store.create(agent, task)?;
     if !store.transition(id, State::Running)? {
         return Err("não foi possível iniciar a sessão".into());
     }
@@ -90,7 +109,7 @@ impl<'a> Server<'a> {
         if cancel.is_some_and(|flag| flag.load(Ordering::Acquire)) {
             return Err(Interrupted.into());
         }
-        let mut child = Command::new(codex_executable()?)
+        let mut child = Command::new(executable("codex")?)
             .args(["app-server", "--stdio", "-c", "mcp_servers={}"])
             .current_dir(cwd)
             .stdin(Stdio::piped())

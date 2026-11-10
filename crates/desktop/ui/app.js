@@ -177,7 +177,8 @@ async function renderDetail() {
   history.replaceChildren();
   historyError.textContent = "";
   const output = document.querySelector("#answer");
-  const hasAnswer = session.state === "completed" && session.agent === "codex";
+  const hasAnswer = session.state === "completed"
+    && ["codex", "codex-review"].includes(session.agent);
   const isLive = session.state === "running" && session.agent === "codex";
   const answerHeading = document.querySelector("#answer-heading");
   answerHeading.hidden = !hasAnswer && !isLive;
