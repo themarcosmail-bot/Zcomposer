@@ -20,6 +20,9 @@ Os dados locais ficam em `.zcomposer/state.sqlite`, dentro da pasta de execuçã
 
 O comando `codex` e o botão **Iniciar turno** usam o Codex CLI autenticado, disponível no PATH. Cada turno abre uma conversa efêmera em modo somente leitura, com prazo de dois minutos. A tarefa, o estado e a resposta final ficam no banco local. Use o ID impresso pela CLI ao consultar `answer`.
 
-Studio e Office mostram o mesmo conjunto de sessões e preservam a seleção quando você alterna de vista. Nesta etapa, são uma lista e uma grade de agentes em HTML, CSS e JavaScript. O canvas interativo e o escritório ilustrado entram nas próximas etapas.
+Na janela desktop, **Interromper** encerra o turno ativo e registra a interrupção no histórico. Você pode iniciar outra tarefa quando o turno anterior terminar de encerrar.
+Se você fechar a janela durante um turno, ela aguarda o encerramento e a gravação do estado antes de sair.
+
+Studio e Office mostram o mesmo conjunto de sessões e preservam a seleção quando você alterna de vista. No Studio, arraste os cartões entre posições da grade ou use os botões de seta. O projeto salva a ordem no SQLite e a restaura ao reabrir. No Office, cada sessão tem uma estação de trabalho que reflete seu estado. Abra um cartão ou uma estação para consultar a tarefa, o histórico de estados e a resposta quando disponível.
 
 No Windows com Rust MSVC, use o Developer PowerShell do Visual Studio caso o linker e o compilador C do SQLite não sejam encontrados.

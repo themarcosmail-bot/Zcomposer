@@ -5,7 +5,7 @@
   "identifier": "app.zcomposer.desktop",
   "build": { "frontendDist": "ui" },
   "app": {
-    "windows": [{ "label": "main", "title": "Zcomposer", "width": 1000, "height": 720, "minWidth": 520 }],
+    "windows": [{ "label": "main", "title": "Zcomposer", "width": 1000, "height": 720, "minWidth": 520, "dragDropEnabled": false }],
     "withGlobalTauri": true,
     "security": { "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; object-src 'none'" }
   },

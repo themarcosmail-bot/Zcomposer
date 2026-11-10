@@ -79,6 +79,10 @@ impl Store {
                  thread_id TEXT NOT NULL,
                  answer TEXT NOT NULL
              );
+             CREATE TABLE IF NOT EXISTS studio_layout (
+                 session_id INTEGER PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
+                 position INTEGER NOT NULL UNIQUE
+             );
              COMMIT;",
         )?;
         Ok(Self(connection))
@@ -202,6 +206,35 @@ impl Store {
             })?
             .collect()
     }
+
+    pub fn session_history(&self, id: i64) -> rusqlite::Result<Vec<String>> {
+        let mut query = self
+            .0
+            .prepare("SELECT state FROM events WHERE session_id = ?1 ORDER BY cursor")?;
+        query.query_map([id], |row| row.get(0))?.collect()
+    }
+
+    pub fn studio_order(&self) -> rusqlite::Result<Vec<i64>> {
+        let mut query = self
+            .0
+            .prepare("SELECT session_id FROM studio_layout ORDER BY position")?;
+        query.query_map([], |row| row.get(0))?.collect()
+    }
+
+    pub fn save_studio_order(&mut self, ids: &[i64]) -> rusqlite::Result<()> {
+        let transaction = self
+            .0
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        transaction.execute("DELETE FROM studio_layout", [])?;
+        {
+            let mut insert = transaction
+                .prepare("INSERT INTO studio_layout (session_id, position) VALUES (?1, ?2)")?;
+            for (position, id) in ids.iter().enumerate() {
+                insert.execute(params![id, position])?;
+            }
+        }
+        transaction.commit()
+    }
 }
 
 #[cfg(test)]
@@ -236,6 +269,22 @@ mod tests {
         assert!(!store.finish_turn(id, "thread", "duplicate")?);
         assert_eq!(store.answer(id)?, "OK");
         assert_eq!(store.events_after(2)?.len(), 1);
+        Ok(())
+    }
+
+    #[test]
+    fn invalid_layout_keeps_saved_order_and_session_history() -> rusqlite::Result<()> {
+        let mut store = Store::open(":memory:")?;
+        let first = store.create("codex", "Primeira tarefa")?;
+        let second = store.create("codex", "Segunda tarefa")?;
+        store.transition(first, State::Running)?;
+        assert!(store.studio_order()?.is_empty());
+
+        store.save_studio_order(&[second, first])?;
+        assert!(store.save_studio_order(&[first, second, first]).is_err());
+        assert_eq!(store.studio_order()?, [second, first]);
+        assert_eq!(store.session_history(first)?, ["queued", "running"]);
+        assert_eq!(store.session_history(second)?, ["queued"]);
         Ok(())
     }
 }

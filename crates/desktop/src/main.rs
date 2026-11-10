@@ -1,15 +1,57 @@
 use std::{
     fs,
     path::PathBuf,
-    sync::atomic::{AtomicBool, Ordering},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 
 use serde_json::{Value, json};
+use tauri::{Manager, Window, WindowEvent};
 use zcomposer_core::Store;
 
 struct Project {
     root: PathBuf,
-    running: AtomicBool,
+    lifecycle: Mutex<WindowLifecycle>,
+}
+
+#[derive(Default)]
+struct WindowLifecycle {
+    active_turn: Option<Arc<AtomicBool>>,
+    closing: bool,
+}
+
+impl WindowLifecycle {
+    fn start_turn(&mut self) -> Result<Arc<AtomicBool>, &'static str> {
+        if self.closing {
+            return Err("A janela está sendo fechada.");
+        }
+        if self.active_turn.is_some() {
+            return Err("Já existe um turno em execução nesta janela.");
+        }
+        let cancel = Arc::new(AtomicBool::new(false));
+        self.active_turn = Some(Arc::clone(&cancel));
+        Ok(cancel)
+    }
+
+    fn interrupt_turn(&self) -> bool {
+        if let Some(cancel) = &self.active_turn {
+            cancel.store(true, Ordering::Release);
+            return true;
+        }
+        false
+    }
+
+    fn request_close(&mut self) -> bool {
+        self.closing = true;
+        self.interrupt_turn()
+    }
+
+    fn finish_turn(&mut self) -> bool {
+        self.active_turn = None;
+        self.closing
+    }
 }
 
 impl Project {
@@ -39,22 +81,81 @@ async fn answer(project: tauri::State<'_, Project>, id: i64) -> Result<String, S
 }
 
 #[tauri::command]
-async fn run_turn(project: tauri::State<'_, Project>, prompt: String) -> Result<i64, String> {
+async fn session_history(
+    project: tauri::State<'_, Project>,
+    id: i64,
+) -> Result<Vec<String>, String> {
+    project
+        .store()?
+        .session_history(id)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn studio_order(project: tauri::State<'_, Project>) -> Result<Vec<i64>, String> {
+    project
+        .store()?
+        .studio_order()
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn save_studio_order(
+    project: tauri::State<'_, Project>,
+    ids: Vec<i64>,
+) -> Result<(), String> {
+    project
+        .store()?
+        .save_studio_order(&ids)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn run_turn(
+    project: tauri::State<'_, Project>,
+    window: Window,
+    prompt: String,
+) -> Result<Value, String> {
     if prompt.trim().is_empty() || prompt.len() > 16_384 {
         return Err("Informe uma tarefa de até 16 KiB.".into());
     }
-    if project.running.swap(true, Ordering::AcqRel) {
-        return Err("Já existe um turno em execução nesta janela.".into());
-    }
+    let cancel = project
+        .lifecycle
+        .lock()
+        .map_err(|error| error.to_string())?
+        .start_turn()?;
     let root = project.root.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
         let mut store =
             Store::open(root.join(".zcomposer/state.sqlite")).map_err(|error| error.to_string())?;
-        zcomposer_adapters::run_codex(&mut store, &root, &prompt).map_err(|error| error.to_string())
+        zcomposer_adapters::run_codex_turn(&mut store, &root, &prompt, Some(&cancel))
+            .map_err(|error| error.to_string())
     })
     .await;
-    project.running.store(false, Ordering::Release);
-    result.map_err(|error| error.to_string())?
+    let close = project
+        .lifecycle
+        .lock()
+        .map_err(|error| error.to_string())?
+        .finish_turn();
+    if close && let Err(error) = window.close() {
+        project
+            .lifecycle
+            .lock()
+            .map_err(|error| error.to_string())?
+            .closing = false;
+        return Err(format!("Não foi possível fechar a janela: {error}"));
+    }
+    let (id, state) = result.map_err(|error| error.to_string())??;
+    Ok(json!({"id": id, "state": state.as_str()}))
+}
+
+#[tauri::command]
+fn interrupt_turn(project: tauri::State<'_, Project>) -> Result<bool, String> {
+    let lifecycle = project
+        .lifecycle
+        .lock()
+        .map_err(|error| error.to_string())?;
+    Ok(lifecycle.interrupt_turn())
 }
 
 fn main() {
@@ -63,9 +164,48 @@ fn main() {
     tauri::Builder::default()
         .manage(Project {
             root,
-            running: AtomicBool::new(false),
+            lifecycle: Mutex::new(WindowLifecycle::default()),
         })
-        .invoke_handler(tauri::generate_handler![snapshot, answer, run_turn])
+        .on_window_event(|window, event| {
+            if window.label() != "main" {
+                return;
+            }
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                let project = window.state::<Project>();
+                let mut lifecycle = project
+                    .lifecycle
+                    .lock()
+                    .unwrap_or_else(|error| error.into_inner());
+                if lifecycle.request_close() {
+                    api.prevent_close();
+                }
+            }
+        })
+        .invoke_handler(tauri::generate_handler![
+            snapshot,
+            answer,
+            session_history,
+            studio_order,
+            save_studio_order,
+            run_turn,
+            interrupt_turn
+        ])
         .run(tauri::generate_context!())
         .expect("iniciar janela do Zcomposer");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn closing_signals_active_turn_and_blocks_new_work() {
+        let mut lifecycle = WindowLifecycle::default();
+        let cancel = lifecycle.start_turn().unwrap();
+        assert!(lifecycle.request_close());
+        assert!(cancel.load(Ordering::Acquire));
+        assert!(lifecycle.finish_turn());
+        assert!(lifecycle.start_turn().is_err());
+        assert!(!lifecycle.request_close());
+    }
 }

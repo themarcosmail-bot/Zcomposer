@@ -21,14 +21,29 @@
         <div class="input-row">
           <input id="prompt" required maxlength="4096" placeholder="Descreva o que você quer entender">
           <button id="start" type="submit">Iniciar turno</button>
+          <button id="interrupt" type="button" hidden>Interromper</button>
         </div>
       </form>
       <p id="status" role="status"></p>
-      <h2 id="heading">Sessões do Studio</h2>
-      <ul id="sessions"></ul>
+      <div class="board-heading">
+        <div>
+          <h2 id="heading">Sessões do Studio</h2>
+          <p id="board-help"></p>
+        </div>
+        <span id="session-count"></span>
+      </div>
+      <p id="layout-status" class="visually-hidden" role="status"></p>
+      <p id="layout-save" role="status"></p>
+      <ul id="sessions" aria-labelledby="heading" aria-describedby="board-help"></ul>
       <section id="detail" hidden aria-labelledby="detail-title">
         <h2 id="detail-title"></h2>
-        <pre id="answer"></pre>
+        <h3>Tarefa</h3>
+        <p id="detail-task" class="detail-task"></p>
+        <h3>Histórico de estados</h3>
+        <ol id="session-history" class="session-history"></ol>
+        <p id="history-error" role="status"></p>
+        <h3 id="answer-heading" hidden>Resposta</h3>
+        <pre id="answer" hidden></pre>
       </section>
     </main>
   </body>
