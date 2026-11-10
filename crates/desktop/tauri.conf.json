@@ -1,0 +1,13 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Zcomposer",
+  "version": "0.1.0",
+  "identifier": "app.zcomposer.desktop",
+  "build": { "frontendDist": "ui" },
+  "app": {
+    "windows": [{ "label": "main", "title": "Zcomposer", "width": 1000, "height": 720, "minWidth": 520 }],
+    "withGlobalTauri": true,
+    "security": { "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; object-src 'none'" }
+  },
+  "bundle": { "active": false }
+}

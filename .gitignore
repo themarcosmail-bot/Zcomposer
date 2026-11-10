@@ -1,0 +1,4 @@
+/target/
+/.zcomposer/
+/crates/desktop/gen/
+/melhorias_orquestrador_studio_office.docx

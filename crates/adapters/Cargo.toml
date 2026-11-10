@@ -1,0 +1,8 @@
+[package]
+name = "zcomposer-adapters"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde_json = "1"
+zcomposer-core = { path = "../core" }

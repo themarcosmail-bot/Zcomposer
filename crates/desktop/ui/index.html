@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Zcomposer</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <header>
+      <h1>Zcomposer</h1>
+      <nav aria-label="Visualização">
+        <button id="studio" type="button" aria-pressed="true">Studio</button>
+        <button id="office" type="button" aria-pressed="false">Office</button>
+      </nav>
+    </header>
+    <main>
+      <form id="turn">
+        <label for="prompt">Tarefa para o Codex <small>Somente leitura</small></label>
+        <div class="input-row">
+          <input id="prompt" required maxlength="4096" placeholder="Descreva o que você quer entender">
+          <button id="start" type="submit">Iniciar turno</button>
+        </div>
+      </form>
+      <p id="status" role="status"></p>
+      <h2 id="heading">Sessões do Studio</h2>
+      <ul id="sessions"></ul>
+      <section id="detail" hidden aria-labelledby="detail-title">
+        <h2 id="detail-title"></h2>
+        <pre id="answer"></pre>
+      </section>
+    </main>
+  </body>
+</html>

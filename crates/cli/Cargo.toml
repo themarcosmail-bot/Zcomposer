@@ -1,0 +1,8 @@
+[package]
+name = "zcomposer"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+zcomposer-adapters = { path = "../adapters" }
+zcomposer-core = { path = "../core" }

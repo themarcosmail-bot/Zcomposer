@@ -1,0 +1,19 @@
+:root { color-scheme: dark; font-family: system-ui, sans-serif; background: #111821; color: #eef4fb; }
+body { margin: 0; }
+header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 2rem; border-bottom: 1px solid #344559; }
+h1 { font-size: 1.3rem; }
+h2 { font-size: 1.05rem; }
+main { padding: 1.5rem 2rem; }
+button, input { font: inherit; color: inherit; background: #1f2d3b; border: 1px solid #526477; border-radius: 6px; padding: .6rem .8rem; }
+button { cursor: pointer; }
+button[aria-pressed="true"], button[type="submit"] { border-color: #6fd5bc; }
+button:disabled { opacity: .55; cursor: wait; }
+.input-row { display: flex; gap: .6rem; margin-top: .4rem; }
+input { flex: 1; min-width: 0; }
+small { color: #a7bacb; margin-left: .5rem; }
+#sessions { display: grid; gap: .6rem; list-style: none; padding: 0; }
+#sessions.office { grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); }
+#sessions button { width: 100%; display: grid; gap: .35rem; text-align: left; overflow-wrap: anywhere; }
+.office button { min-height: 130px; align-content: start; }
+.avatar { width: 28px; height: 28px; background: #6fd5bc; clip-path: polygon(25% 0, 75% 0, 75% 12%, 87% 12%, 87% 63%, 75% 63%, 75% 75%, 100% 75%, 100% 100%, 0 100%, 0 75%, 25% 75%, 25% 63%, 12% 63%, 12% 12%, 25% 12%); }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 1rem; background: #1f2d3b; }
