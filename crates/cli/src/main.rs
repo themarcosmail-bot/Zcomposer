@@ -1,9 +1,14 @@
-use std::{env, error::Error, fs, path::Path};
+use std::{
+    env,
+    error::Error,
+    fs,
+    io::{self, Write},
+    path::Path,
+};
 
-use zcomposer_core::{State, Store};
+use zcomposer_core::{ReviewReport, State, Store};
 
-const USAGE: &str =
-    "zcomposer demo | codex <tarefa> | review <commit> | answer <id> | sessions | events [cursor]";
+const USAGE: &str = "zcomposer demo | codex <tarefa> | review <commit> | review-report <id> | answer <id> | sessions | events [cursor]";
 
 fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let args: Vec<_> = env::args().skip(1).collect();
@@ -27,6 +32,13 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         [command, revision] if command == "review" && !revision.trim().is_empty() => {
             let id = zcomposer_adapters::review_commit(&mut store, &env::current_dir()?, revision)?;
             println!("Sessão {id}\n{}", store.answer(id)?);
+        }
+        [command, id] if command == "review-report" => {
+            let id = id.parse()?;
+            let report = store
+                .review_report(id)?
+                .ok_or("Informe o ID de uma revisão concluída com parecer salvo.")?;
+            write_review_report(io::stdout().lock(), id, &report)?;
         }
         [command, id] if command == "answer" => {
             println!("{}", store.answer(id.parse()?)?);
@@ -59,6 +71,32 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             }
         }
         _ => return Err(format!("uso: {USAGE}").into()),
+    }
+    Ok(())
+}
+
+fn write_review_report(mut output: impl Write, id: i64, report: &ReviewReport) -> io::Result<()> {
+    let decision = match report.approved {
+        Some(true) => "Aprovada",
+        Some(false) => "Ajustes solicitados",
+        None => "Pendente",
+    };
+    writeln!(
+        output,
+        "# Revisão do Codex\n\n- Sessão `#{id}`\n- Decisão humana — {decision}"
+    )?;
+    if let Some(commit) = report
+        .task
+        .strip_prefix("Revisar commit ")
+        .filter(|commit| {
+            matches!(commit.len(), 40 | 64) && commit.bytes().all(|byte| byte.is_ascii_hexdigit())
+        })
+    {
+        writeln!(output, "- Commit `{commit}`")?;
+    }
+    writeln!(output, "\n## Parecer\n")?;
+    for line in report.answer.lines() {
+        writeln!(output, "    {line}")?;
     }
     Ok(())
 }

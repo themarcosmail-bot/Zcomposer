@@ -31,4 +31,6 @@ Selecione **Revisar commit** na janela ou use `cargo run -- review HEAD` para en
 
 Depois de ler o parecer, use **Aprovar revisão** ou **Solicitar ajustes**. A decisão fica salva na sessão. Para registrar uma nova decisão, inicie outra revisão. Esses botões registram o resultado da análise no Zcomposer.
 
+Para exportar o registro em Markdown, use `cargo run -- review-report 7 > revisao-7.md`, substituindo `7` pelo ID da revisão concluída. O relatório reúne o hash do commit, a decisão humana e o texto do parecer.
+
 No Windows com Rust MSVC, use o Developer PowerShell do Visual Studio caso o linker e o compilador C do SQLite não sejam encontrados.

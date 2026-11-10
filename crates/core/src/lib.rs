@@ -41,6 +41,13 @@ pub struct Session {
 }
 
 #[derive(Debug, PartialEq, Eq)]
+pub struct ReviewReport {
+    pub task: String,
+    pub answer: String,
+    pub approved: Option<bool>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
 pub struct Event {
     pub cursor: i64,
     pub session_id: i64,
@@ -230,6 +237,27 @@ impl Store {
             .optional()
     }
 
+    pub fn review_report(&self, id: i64) -> rusqlite::Result<Option<ReviewReport>> {
+        use rusqlite::OptionalExtension;
+
+        self.0
+            .query_row(
+                "SELECT sessions.task, turn_results.answer, review_decisions.approved
+                 FROM sessions JOIN turn_results ON turn_results.session_id = sessions.id
+                 LEFT JOIN review_decisions ON review_decisions.session_id = sessions.id
+                 WHERE sessions.id = ?1 AND sessions.agent = 'codex-review' AND sessions.state = 'completed'",
+                [id],
+                |row| {
+                    Ok(ReviewReport {
+                        task: row.get(0)?,
+                        answer: row.get(1)?,
+                        approved: row.get(2)?,
+                    })
+                },
+            )
+            .optional()
+    }
+
     /// Records one human decision for a completed review with a stored answer.
     pub fn decide_review(&self, id: i64, approved: bool) -> rusqlite::Result<bool> {
         let changed = self.0.execute(
@@ -323,15 +351,25 @@ mod tests {
         let review = store.create("codex-review", "Revisar commit de teste")?;
         let task = store.create("codex", "Tarefa comum")?;
         assert!(!store.decide_review(review, true)?);
+        assert_eq!(store.review_report(review)?, None);
         store.transition(task, State::Running)?;
         store.finish_turn(task, "task", "Resposta")?;
         assert!(!store.decide_review(task, true)?);
+        assert_eq!(store.review_report(task)?, None);
         store.transition(review, State::Running)?;
         store.finish_turn(review, "review", "Parecer")?;
         assert_eq!(store.review_decision(review)?, None);
         assert!(store.decide_review(review, false)?);
         assert!(!store.decide_review(review, true)?);
         assert_eq!(store.review_decision(review)?, Some(false));
+        assert_eq!(
+            store.review_report(review)?,
+            Some(ReviewReport {
+                task: "Revisar commit de teste".into(),
+                answer: "Parecer".into(),
+                approved: Some(false),
+            })
+        );
         Ok(())
     }
 }
