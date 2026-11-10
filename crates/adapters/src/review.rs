@@ -2,6 +2,7 @@ use std::{
     io::Read,
     path::Path,
     process::{Command, Stdio},
+    sync::atomic::AtomicBool,
 };
 
 use zcomposer_core::{State, Store};
@@ -11,6 +12,20 @@ use crate::{Result, executable, run_turn};
 const MAX_DIFF_BYTES: usize = 64 * 1024;
 
 pub fn review_commit(store: &mut Store, cwd: &Path, revision: &str) -> Result<i64> {
+    let (id, state) = review_commit_turn(store, cwd, revision, None, |_, _| {})?;
+    if state != State::Completed {
+        return Err(format!("A revisão da sessão {id} foi interrompida.").into());
+    }
+    Ok(id)
+}
+
+pub fn review_commit_turn(
+    store: &mut Store,
+    cwd: &Path,
+    revision: &str,
+    cancel: Option<&AtomicBool>,
+    on_draft: impl FnMut(i64, &str),
+) -> Result<(i64, State)> {
     let commit = git_output(
         cwd,
         &[
@@ -50,11 +65,7 @@ pub fn review_commit(store: &mut Store, cwd: &Path, revision: &str) -> Result<i6
          indique arquivo e linha aproximada, impacto e correção sugerida. Se não encontrar \
          problemas, diga isso e indique os limites da revisão.\n\n{diff}"
     );
-    let (id, state) = run_turn(store, cwd, "codex-review", &task, &prompt, None, |_, _| {})?;
-    if state != State::Completed {
-        return Err(format!("A revisão da sessão {id} foi interrompida.").into());
-    }
-    Ok(id)
+    run_turn(store, cwd, "codex-review", &task, &prompt, cancel, on_draft)
 }
 
 fn git_output(cwd: &Path, args: &[&str], limit: usize) -> Result<String> {

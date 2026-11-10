@@ -1,6 +1,8 @@
 const invoke = window.__TAURI__.core.invoke;
 const form = document.querySelector("#turn");
 const prompt = document.querySelector("#prompt");
+const mode = document.querySelector("#turn-mode");
+const revision = document.querySelector("#revision");
 const start = document.querySelector("#start");
 const interrupt = document.querySelector("#interrupt");
 const status = document.querySelector("#status");
@@ -177,9 +179,9 @@ async function renderDetail() {
   history.replaceChildren();
   historyError.textContent = "";
   const output = document.querySelector("#answer");
-  const hasAnswer = session.state === "completed"
-    && ["codex", "codex-review"].includes(session.agent);
-  const isLive = session.state === "running" && session.agent === "codex";
+  const isCodex = ["codex", "codex-review"].includes(session.agent);
+  const hasAnswer = session.state === "completed" && isCodex;
+  const isLive = session.state === "running" && isCodex;
   const answerHeading = document.querySelector("#answer-heading");
   answerHeading.hidden = !hasAnswer && !isLive;
   answerHeading.textContent = isLive ? "Resposta em andamento" : "Resposta";
@@ -206,7 +208,7 @@ async function renderDetail() {
 
 async function refreshLiveAnswer() {
   const session = detailSession;
-  if (session?.agent !== "codex" || session.state !== "running") return;
+  if (session?.state !== "running" || !["codex", "codex-review"].includes(session.agent)) return;
   const request = detailRequest;
   const text = await invoke("live_answer", { id: session.id });
   if (request === detailRequest && text) {
@@ -245,6 +247,20 @@ document.addEventListener("dragover", (event) => {
 document.addEventListener("drop", (event) => event.preventDefault());
 studio.addEventListener("click", () => { view = "studio"; render(); });
 office.addEventListener("click", () => { view = "office"; render(); });
+function renderTurnMode() {
+  const review = mode.value === "review";
+  const label = document.querySelector("#turn-label");
+  label.htmlFor = review ? "revision" : "prompt";
+  label.textContent = review ? "Commit para revisar" : "Tarefa para o Codex";
+  document.querySelector("#turn-help").textContent = review
+    ? "O diff do commit será enviado ao Codex."
+    : "Somente leitura";
+  prompt.hidden = prompt.disabled = review;
+  revision.hidden = revision.disabled = !review;
+  start.textContent = review ? "Iniciar revisão" : "Iniciar turno";
+}
+mode.addEventListener("change", renderTurnMode);
+renderTurnMode();
 interrupt.addEventListener("click", () => {
   if (interruptRequest || interrupt.disabled) return;
   interrupt.disabled = true;
@@ -267,12 +283,15 @@ interrupt.addEventListener("click", () => {
 });
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
-  if (start.disabled || !prompt.value.trim()) return;
+  const review = mode.value === "review";
+  const input = (review ? revision : prompt).value.trim();
+  if (start.disabled || !input) return;
   start.disabled = true;
+  mode.disabled = true;
   interrupt.hidden = false;
-  status.textContent = "Turno em execução.";
+  status.textContent = review ? "Revisão em execução." : "Turno em execução.";
   try {
-    const turn = await invoke("run_turn", { prompt: prompt.value.trim() });
+    const turn = await invoke("run_turn", { prompt: input, review });
     interrupt.hidden = true;
     await interruptRequest;
     selected = turn.id;
@@ -287,6 +306,7 @@ form.addEventListener("submit", async (event) => {
   } finally {
     interruptRequest = null;
     interrupt.disabled = false;
+    mode.disabled = false;
     start.disabled = false;
   }
 });

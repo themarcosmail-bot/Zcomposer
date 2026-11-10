@@ -125,6 +125,7 @@ async fn run_turn(
     project: tauri::State<'_, Project>,
     window: Window,
     prompt: String,
+    review: bool,
 ) -> Result<Value, String> {
     if prompt.trim().is_empty() || prompt.len() > 16_384 {
         return Err("Informe uma tarefa de até 16 KiB.".into());
@@ -139,12 +140,23 @@ async fn run_turn(
     let result = tauri::async_runtime::spawn_blocking(move || {
         let mut store =
             Store::open(root.join(".zcomposer/state.sqlite")).map_err(|error| error.to_string())?;
-        zcomposer_adapters::run_codex_turn(&mut store, &root, &prompt, Some(&cancel), |id, text| {
+        let on_draft = |id, text: &str| {
             if let Ok(mut draft) = draft.lock() {
                 *draft = Some((id, text.to_owned()));
             }
-        })
-        .map_err(|error| error.to_string())
+        };
+        let turn = if review {
+            zcomposer_adapters::review_commit_turn(
+                &mut store,
+                &root,
+                &prompt,
+                Some(&cancel),
+                on_draft,
+            )
+        } else {
+            zcomposer_adapters::run_codex_turn(&mut store, &root, &prompt, Some(&cancel), on_draft)
+        };
+        turn.map_err(|error| error.to_string())
     })
     .await;
     *project.draft.lock().map_err(|error| error.to_string())? = None;

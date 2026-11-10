@@ -15,7 +15,7 @@ use serde_json::{Value, json};
 use zcomposer_core::{State, Store};
 
 mod review;
-pub use review::review_commit;
+pub use review::{review_commit, review_commit_turn};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 

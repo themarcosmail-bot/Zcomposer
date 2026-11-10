@@ -4,7 +4,9 @@ header { display: flex; justify-content: space-between; align-items: center; pad
 h1 { font-size: 1.3rem; }
 h2 { font-size: 1.05rem; }
 main { padding: 1.5rem 2rem; }
-button, input { font: inherit; color: inherit; background: #1f2d3b; border: 1px solid #526477; border-radius: 6px; padding: .6rem .8rem; }
+button, input, select { font: inherit; color: inherit; background: #1f2d3b; border: 1px solid #526477; border-radius: 6px; padding: .6rem .8rem; }
+#turn-mode { margin: 0 .5rem .65rem; }
+#turn-label { display: inline-block; }
 button { cursor: pointer; }
 button[aria-pressed="true"], button[type="submit"] { border-color: #6fd5bc; }
 button:disabled { opacity: .55; cursor: wait; }

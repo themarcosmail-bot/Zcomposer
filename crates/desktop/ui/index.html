@@ -17,9 +17,16 @@
     </header>
     <main>
       <form id="turn">
-        <label for="prompt">Tarefa para o Codex <small>Somente leitura</small></label>
+        <label for="turn-mode">Ação do Codex</label>
+        <select id="turn-mode">
+          <option value="task">Enviar tarefa</option>
+          <option value="review">Revisar commit</option>
+        </select>
+        <label id="turn-label" for="prompt">Tarefa para o Codex</label>
+        <small id="turn-help">Somente leitura</small>
         <div class="input-row">
-          <input id="prompt" required maxlength="4096" placeholder="Descreva o que você quer entender">
+          <input id="prompt" required maxlength="4096" aria-describedby="turn-help" placeholder="Descreva o que você quer entender">
+          <input id="revision" disabled hidden required value="HEAD" maxlength="512" aria-describedby="turn-help" placeholder="HEAD ou hash do commit">
           <button id="start" type="submit">Iniciar turno</button>
           <button id="interrupt" type="button" hidden>Interromper</button>
         </div>
