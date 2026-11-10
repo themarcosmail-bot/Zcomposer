@@ -91,6 +91,29 @@ fn live_answer(project: tauri::State<'_, Project>, id: i64) -> Result<Option<Str
 }
 
 #[tauri::command]
+async fn review_decision(
+    project: tauri::State<'_, Project>,
+    id: i64,
+) -> Result<Option<bool>, String> {
+    project
+        .store()?
+        .review_decision(id)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn decide_review(
+    project: tauri::State<'_, Project>,
+    id: i64,
+    approved: bool,
+) -> Result<bool, String> {
+    project
+        .store()?
+        .decide_review(id, approved)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 async fn session_history(
     project: tauri::State<'_, Project>,
     id: i64,
@@ -214,6 +237,8 @@ fn main() {
             snapshot,
             answer,
             live_answer,
+            review_decision,
+            decide_review,
             session_history,
             studio_order,
             save_studio_order,

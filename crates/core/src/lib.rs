@@ -83,6 +83,10 @@ impl Store {
                  session_id INTEGER PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
                  position INTEGER NOT NULL UNIQUE
              );
+             CREATE TABLE IF NOT EXISTS review_decisions (
+                 session_id INTEGER PRIMARY KEY REFERENCES sessions(id),
+                 approved INTEGER NOT NULL CHECK (approved IN (0, 1))
+             );
              COMMIT;",
         )?;
         Ok(Self(connection))
@@ -214,6 +218,30 @@ impl Store {
         query.query_map([id], |row| row.get(0))?.collect()
     }
 
+    pub fn review_decision(&self, id: i64) -> rusqlite::Result<Option<bool>> {
+        use rusqlite::OptionalExtension;
+
+        self.0
+            .query_row(
+                "SELECT approved FROM review_decisions WHERE session_id = ?1",
+                [id],
+                |row| row.get(0),
+            )
+            .optional()
+    }
+
+    /// Records one human decision for a completed review with a stored answer.
+    pub fn decide_review(&self, id: i64, approved: bool) -> rusqlite::Result<bool> {
+        let changed = self.0.execute(
+            "INSERT INTO review_decisions (session_id, approved)
+             SELECT sessions.id, ?2 FROM sessions JOIN turn_results ON turn_results.session_id = sessions.id
+             WHERE sessions.id = ?1 AND sessions.agent = 'codex-review' AND sessions.state = 'completed'
+             ON CONFLICT(session_id) DO NOTHING",
+            params![id, approved],
+        )?;
+        Ok(changed == 1)
+    }
+
     pub fn studio_order(&self) -> rusqlite::Result<Vec<i64>> {
         let mut query = self
             .0
@@ -285,6 +313,25 @@ mod tests {
         assert_eq!(store.studio_order()?, [second, first]);
         assert_eq!(store.session_history(first)?, ["queued", "running"]);
         assert_eq!(store.session_history(second)?, ["queued"]);
+        Ok(())
+    }
+
+    #[test]
+    fn review_decision_requires_a_completed_review_and_cannot_be_overwritten()
+    -> rusqlite::Result<()> {
+        let mut store = Store::open(":memory:")?;
+        let review = store.create("codex-review", "Revisar commit de teste")?;
+        let task = store.create("codex", "Tarefa comum")?;
+        assert!(!store.decide_review(review, true)?);
+        store.transition(task, State::Running)?;
+        store.finish_turn(task, "task", "Resposta")?;
+        assert!(!store.decide_review(task, true)?);
+        store.transition(review, State::Running)?;
+        store.finish_turn(review, "review", "Parecer")?;
+        assert_eq!(store.review_decision(review)?, None);
+        assert!(store.decide_review(review, false)?);
+        assert!(!store.decide_review(review, true)?);
+        assert_eq!(store.review_decision(review)?, Some(false));
         Ok(())
     }
 }

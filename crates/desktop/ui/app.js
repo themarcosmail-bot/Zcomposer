@@ -11,6 +11,11 @@ const detail = document.querySelector("#detail");
 const heading = document.querySelector("#heading");
 const studio = document.querySelector("#studio");
 const office = document.querySelector("#office");
+const decisionPanel = document.querySelector("#review-decision");
+const decisionStatus = document.querySelector("#review-decision-status");
+const decisionActions = document.querySelector("#review-decision-actions");
+const approveReview = document.querySelector("#approve-review");
+const rejectReview = document.querySelector("#reject-review");
 const stateLabels = {
   queued: "Na fila",
   running: "Trabalhando",
@@ -182,6 +187,9 @@ async function renderDetail() {
   const isCodex = ["codex", "codex-review"].includes(session.agent);
   const hasAnswer = session.state === "completed" && isCodex;
   const isLive = session.state === "running" && isCodex;
+  decisionPanel.hidden = !(hasAnswer && session.agent === "codex-review");
+  decisionActions.hidden = true;
+  decisionStatus.textContent = "";
   const answerHeading = document.querySelector("#answer-heading");
   answerHeading.hidden = !hasAnswer && !isLive;
   answerHeading.textContent = isLive ? "Resposta em andamento" : "Resposta";
@@ -203,6 +211,40 @@ async function renderDetail() {
   }
   if (hasAnswer) {
     output.textContent = answer.status === "fulfilled" ? answer.value : "Não foi possível carregar a resposta.";
+  }
+  if (!decisionPanel.hidden && answer.status === "fulfilled") {
+    decisionStatus.textContent = "Carregando decisão…";
+    void refreshReviewDecision(session.id, request);
+  }
+}
+
+async function refreshReviewDecision(id, request) {
+  try {
+    const approved = await invoke("review_decision", { id });
+    if (request !== detailRequest) return;
+    decisionActions.hidden = approved !== null;
+    approveReview.disabled = rejectReview.disabled = false;
+    decisionStatus.textContent = approved === null
+      ? "Aguardando decisão. Para decidir novamente, inicie outra revisão."
+      : approved ? "Revisão aprovada." : "Ajustes solicitados.";
+  } catch {
+    if (request === detailRequest) decisionStatus.textContent = "Não foi possível carregar a decisão.";
+  }
+}
+
+async function submitReviewDecision(approved) {
+  if (decisionPanel.hidden || decisionActions.hidden || approveReview.disabled) return;
+  const id = detailSession.id;
+  const request = detailRequest;
+  approveReview.disabled = rejectReview.disabled = true;
+  try {
+    await invoke("decide_review", { id, approved });
+    await refreshReviewDecision(id, request);
+  } catch {
+    if (request === detailRequest) {
+      decisionStatus.textContent = "Não foi possível salvar a decisão.";
+      approveReview.disabled = rejectReview.disabled = false;
+    }
   }
 }
 
@@ -247,6 +289,8 @@ document.addEventListener("dragover", (event) => {
 document.addEventListener("drop", (event) => event.preventDefault());
 studio.addEventListener("click", () => { view = "studio"; render(); });
 office.addEventListener("click", () => { view = "office"; render(); });
+approveReview.addEventListener("click", () => void submitReviewDecision(true));
+rejectReview.addEventListener("click", () => void submitReviewDecision(false));
 function renderTurnMode() {
   const review = mode.value === "review";
   const label = document.querySelector("#turn-label");

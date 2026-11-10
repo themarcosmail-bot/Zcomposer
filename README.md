@@ -29,4 +29,6 @@ Selecione um turno ativo iniciado na janela para acompanhar a resposta enquanto 
 
 Selecione **Revisar commit** na janela ou use `cargo run -- review HEAD` para enviar o diff de um commit ao Codex e registrar o parecer. Você pode indicar outro commit no lugar de `HEAD`. A revisão aceita diffs de até 64 KiB e aparece como uma sessão `codex-review` no Studio e no Office.
 
+Depois de ler o parecer, use **Aprovar revisão** ou **Solicitar ajustes**. A decisão fica salva na sessão. Para registrar uma nova decisão, inicie outra revisão. Esses botões registram o resultado da análise no Zcomposer.
+
 No Windows com Rust MSVC, use o Developer PowerShell do Visual Studio caso o linker e o compilador C do SQLite não sejam encontrados.
